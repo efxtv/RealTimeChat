@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title> <!-- Title will be set dynamically -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #chat-window {
+            flex: 1;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        #input-area {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-top: 1px solid #ccc;
+            background-color: white;
+        }
+        #upload-icon {
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        #name-area {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script>
+        $(document).ready(function() {
+            const room = window.location.hash.substring(1) || 'default'; // Get room from URL hash
+            document.title = room || 'Chat Room'; // Set the title to the room name
+
+            let userName = '';
+            $('#name-submit').click(function() {
+                userName = $('#name').val() || 'Anonymous';
+                $('#name').prop('disabled', true);
+                $('#name-submit').prop('disabled', true);
+                $('#input-area').show();
+                $('#message').focus();
+                socket.emit('join', { name: userName, room: room });
+            });
+
+            // Handle 'Enter' key press
+            $('#message').keypress(function(event) {
+                if (event.which === 13 && userName) { // Check if Enter key is pressed and userName is set
+                    const message = $('#message').val();
+                    if (message) {
+                        socket.emit('send_message', { name: userName, room: room, message: message });
+                        $('#message').val('');
+                    }
+                    event.preventDefault();
+                }
+            });
+
+            $('#send').click(function() {
+                const message = $('#message').val();
+                if (message) {
+                    socket.emit('send_message', { name: userName, room: room, message: message });
+                    $('#message').val('');
+                }
+            });
+
+            $('#upload-icon').click(function() {
+                $('#file').click();
+            });
+
+            $('#file').change(function() {
+                const file = this.files[0];
+                const formData = new FormData();
+                formData.append('photo', file);
+
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function(data) {
+                        socket.emit('upload_image', { room: room, image_path: data.image_path });
+                    },
+                    error: function() {
+                        alert('File upload failed.');
+                    }
+                });
+            });
+
+            socket.on('receive_message', function(data) {
+                if (data.room === room) {
+                    $('#chat-window').append(`<p><strong>${data.name}:</strong> ${data.message}</p>`);
+                    $('#chat-window').scrollTop($('#chat-window')[0].scrollHeight);
+                }
+            });
+
+            socket.on('receive_image', function(data) {
+                if (data.room === room) {
+                    $('#chat-window').append(`<img src="${data.image_path}" style="max-width: 200px;"/>`);
+                    $('#chat-window').scrollTop($('#chat-window')[0].scrollHeight);
+                }
+            });
+
+            socket.on('user_joined', function(data) {
+                if (data.room === room) {
+                    $('#chat-window').append(`<p><em>${data.name} has joined the chat.</em></p>`);
+                    $('#chat-window').scrollTop($('#chat-window')[0].scrollHeight);
+                }
+            });
+        });
+
+        // Initialize Socket.io
+        const socket = io();
+    </script>
+</head>
+<body>
+    <h2 style="text-align: center;">Chat Room</h2>
+    <div id="name-area">
+        <input id="name" placeholder="Enter your name" required>
+        <button id="name-submit">Submit Name</button>
+    </div>
+    <div id="chat-window"></div>
+    <div id="input-area" style="display: none;">
+        <input id="message" placeholder="Type a message..." style="flex: 1;">
+        <input type="file" id="file" accept="image/*" style="display: none;">
+        <img id="upload-icon" src="https://img.icons8.com/ios-filled/50/000000/upload.png" alt="Upload" width="30">
+        <button id="send">Send</button>
+    </div>
+</body>
+</html>
+
